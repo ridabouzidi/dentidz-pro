@@ -303,7 +303,21 @@ const initialReminderHistory: ReminderLog[] = [
 ];
 
 export default function App() {
-  const [view, setView] = useState<"patient" | "dentist" | "admin">("admin");
+  // SECURITY FIX: Default is patient (public marketplace), admin is hidden behind /owner-secure-bba-2026 + secret code
+  const getInitialView = (): "patient" | "dentist" | "admin" | "admin-login" => {
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (path.includes("owner-secure-bba-2026") || hash.includes("owner-secure-bba-2026")) {
+        return "admin-login";
+      }
+    }
+    return "patient";
+  };
+  const [view, setView] = useState<"patient" | "dentist" | "admin" | "admin-login">(getInitialView());
+  const [ownerAuthenticated, setOwnerAuthenticated] = useState(false);
+  const [ownerSecretInput, setOwnerSecretInput] = useState("");
+  const [ownerLoginError, setOwnerLoginError] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>(initialSubs);
   const [profiles, setProfiles] = useState<Record<string, DoctorProfile>>(initialProfiles);
   const [bookings, setBookings] = useState<Booking[]>(initialBookings);
@@ -708,14 +722,16 @@ export default function App() {
             >
               دخول الطبيب
             </button>
-            <button
-              onClick={() => setView("admin")}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                view === "admin" ? "bg-[#0e7490] shadow text-white" : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              لوحة المالك
-            </button>
+            {ownerAuthenticated && (
+              <button
+                onClick={() => setView("admin")}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  view === "admin" ? "bg-[#0e7490] shadow text-white" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                لوحة المالك
+              </button>
+            )}
           </div>
 
           <div className="md:hidden flex items-center gap-1 bg-slate-100 p-1 rounded-full">
@@ -731,19 +747,73 @@ export default function App() {
             >
               <Stethoscope className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => setView("admin")}
-              className={`w-8 h-8 rounded-full grid place-items-center ${view === "admin" ? "bg-[#0e7490] text-white" : "text-slate-500"}`}
-            >
-              <Shield className="w-4 h-4" />
-            </button>
+            {ownerAuthenticated && (
+              <button
+                onClick={() => setView("admin")}
+                className={`w-8 h-8 rounded-full grid place-items-center ${view === "admin" ? "bg-[#0e7490] text-white" : "text-slate-500"}`}
+              >
+                <Shield className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       <main className="max-w-[1280px] mx-auto px-4 md:px-6 py-6 md:py-10">
-        {/* ADMIN VIEW */}
-        {view === "admin" && (
+        {/* OWNER SECRET LOGIN - /owner-secure-bba-2026 - anonymous, no name */}
+        {view === "admin-login" && (
+          <div className="min-h-[70vh] flex items-center justify-center">
+            <div className="w-full max-w-[400px] bg-white rounded-[24px] p-8 border border-slate-100 shadow-xl">
+              <div className="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center mx-auto mb-5">
+                <Lock className="w-7 h-7 text-white" />
+              </div>
+              <h1 className="text-[22px] font-extrabold text-center">دخول المالك</h1>
+              <p className="text-xs text-slate-500 text-center mt-1">Accès propriétaire • رابط سري</p>
+              <p className="text-[11px] text-slate-400 text-center mt-2 font-mono">/owner-secure-bba-2026</p>
+              
+              <div className="mt-6">
+                <label className="text-xs font-bold">كلمة السر السرية</label>
+                <input
+                  type="password"
+                  value={ownerSecretInput}
+                  onChange={(e)=>{setOwnerSecretInput(e.target.value); setOwnerLoginError(null);}}
+                  onKeyDown={(e)=>{ if(e.key==="Enter"){ 
+                    if(ownerSecretInput==="ridazemoura"){ setOwnerAuthenticated(true); setView("admin"); setOwnerSecretInput(""); }
+                    else{ setOwnerLoginError("كلمة السر خاطئة • Code incorrect"); }
+                  }}}
+                  placeholder="اكتب الكود السري..."
+                  className="mt-2 w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-slate-900 focus:outline-none text-sm"
+                />
+                {ownerLoginError && <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5 flex gap-1.5"><AlertCircle className="w-4 h-4"/>{ownerLoginError}</div>}
+                <button
+                  onClick={()=>{
+                    if(ownerSecretInput==="ridazemoura"){ setOwnerAuthenticated(true); setView("admin"); setOwnerSecretInput(""); }
+                    else{ setOwnerLoginError("كلمة السر خاطئة • Code incorrect"); }
+                  }}
+                  className="mt-4 w-full h-12 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-black transition flex items-center justify-center gap-2"
+                >
+                  <Key className="w-4 h-4"/> دخول
+                </button>
+                <button onClick={()=>setView("patient")} className="mt-3 w-full text-[11px] text-slate-500 hover:text-slate-700">← رجوع للصفحة الرئيسية</button>
+                <div className="mt-6 p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-800">
+                  <b>تنبيه أمني:</b> هذا الرابط مخفي وما فيهش اسمك. فقط انت تعرف كلمة السر
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ADMIN VIEW - PROTECTED */}
+        {view === "admin" && !ownerAuthenticated && (
+          <div className="min-h-[50vh] flex items-center justify-center">
+            <div className="text-center">
+              <Shield className="w-12 h-12 mx-auto text-slate-300 mb-3"/>
+              <p className="text-sm text-slate-600">يجب تسجيل الدخول كمالك أولا</p>
+              <button onClick={()=>setView("admin-login")} className="mt-3 px-4 py-2 rounded-full bg-slate-900 text-white text-xs">دخول المالك</button>
+            </div>
+          </div>
+        )}
+        {view === "admin" && ownerAuthenticated && (
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
@@ -1959,220 +2029,122 @@ export default function App() {
           </div>
         )}
 
-        {/* PATIENT VIEW */}
+        {/* PATIENT VIEW - BORDJ LOCAL ONLY */}
         {view === "patient" && (
           <div className="space-y-6">
-            <div className="flex flex-col lg:flex-row gap-6">
-              {/* Dentist Card */}
-              <div className="lg:w-[380px] space-y-4">
-                <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-[0_10px_30px_-15px_rgba(14,116,144,0.2)]">
-                  <div className="flex items-center justify-between">
-                    <h2 className="font-extrabold text-[16px]">اختر العيادة</h2>
-                    <span className="text-[11px] bg-cyan-50 text-[#0e7490] border border-cyan-100 px-2.5 py-1 rounded-full">Cabinet dentaire</span>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    {activeSubs.map(sub=>{
-                      const p = profiles[sub.code];
-                      return (
-                        <button key={sub.code} onClick={()=>setSelectedDentistCode(sub.code)} className={`w-full text-right p-3.5 rounded-xl border text-sm transition flex gap-3 items-start ${selectedDentistCode===sub.code?"bg-[#0e7490] text-white border-[#0e7490] shadow-lg shadow-cyan-900/20":"bg-slate-50 border-slate-200 hover:bg-white"}`}>
-                          <div className={`w-10 h-10 rounded-xl grid place-items-center font-bold shrink-0 ${selectedDentistCode===sub.code?"bg-white/15":"bg-white text-[#0e7490]"}`}>{p.name.charAt(0)}</div>
-                          <div className="flex-1">
-                            <div className="font-bold leading-tight">{p.name}</div>
-                            <div className={`text-[11px] mt-1 ${selectedDentistCode===sub.code?"text-cyan-100":"text-slate-500"}`}>{p.address.slice(0,38)}</div>
-                          </div>
-                          {selectedDentistCode===sub.code && <CheckCircle2 className="w-5 h-5 mt-1"/>}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {selectedProfile && selectedSub && (
-                  <div className="bg-white rounded-[24px] overflow-hidden border border-slate-100 shadow-sm">
-                    <div className="h-[88px] bg-gradient-to-br from-[#0e7490] to-cyan-600 relative">
-                      <div className="absolute -bottom-8 right-6 w-16 h-16 rounded-2xl bg-white shadow-lg grid place-items-center text-[#0e7490] font-extrabold text-xl border">
-                        {selectedProfile.name.charAt(0)}
-                      </div>
-                    </div>
-                    <div className="pt-12 p-6">
-                      <h3 className="font-extrabold text-[18px]">{selectedProfile.name}</h3>
-                      <p className="text-xs text-slate-500 mt-1 flex items-start gap-1.5"><MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0"/>{selectedProfile.address}</p>
-
-                      <div className="mt-5 grid grid-cols-1 gap-2.5">
-                        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border">
-                          <div className="w-8 h-8 rounded-lg bg-white border grid place-items-center"><Mail className="w-4 h-4 text-slate-500"/></div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[10px] text-slate-500">Email</div>
-                            <div className="text-xs font-medium truncate">{selectedProfile.email}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border">
-                          <div className="w-8 h-8 rounded-lg bg-white border grid place-items-center"><Globe className="w-4 h-4 text-slate-500"/></div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[10px] text-slate-500">Site web</div>
-                            <a href={`https://${selectedProfile.website}`} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#0e7490] hover:underline truncate block">{selectedProfile.website}</a>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border">
-                          <div className="w-8 h-8 rounded-lg bg-white border grid place-items-center"><Phone className="w-4 h-4 text-slate-500"/></div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[10px] text-slate-500">WhatsApp • واتساب</div>
-                            <div dir="ltr" className="text-xs font-medium">{selectedProfile.whatsapp}</div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-5">
-                        <div className="text-xs font-bold mb-2">الخدمات المتوفرة</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {selectedProfile.services.map(s=>(
-                            <span key={s} className="text-[11px] px-2.5 py-1 rounded-full bg-cyan-50 border border-cyan-100 text-cyan-800">{s}</span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="mt-5 grid grid-cols-2 gap-2">
-                        <a href={`https://wa.me/${selectedProfile.whatsapp}`} target="_blank" rel="noopener noreferrer" className="h-11 rounded-xl bg-[#25D366] text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-[#128C7E] transition">
-                          <MessageCircle className="w-4 h-4"/>
-                          واتساب مباشر
-                        </a>
-                        <a href={`mailto:${selectedProfile.email}`} className="h-11 rounded-xl bg-white border font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-slate-50">
-                          <Mail className="w-4 h-4"/>
-                          إيميل
-                        </a>
-                      </div>
-
-                      <div className="mt-5 p-3 rounded-xl bg-[#f0f9ff] border border-cyan-100">
-                        <div className="text-[11px] font-bold text-[#0e7490] flex items-center gap-1"><MapPin className="w-3.5 h-3.5"/>موقع العيادة على الخريطة</div>
-                        <div className="mt-2 h-[110px] rounded-lg bg-white border grid place-items-center relative overflow-hidden">
-                          <div className="absolute inset-0 opacity-[0.05]" style={{backgroundImage:`url("data:image/svg+xml,%3Csvg width='20' height='20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h20v20H0z' fill='none'/%3E%3Cpath d='M0 10h20M10 0v20' stroke='%230e7490'/%3E%3C/svg%3E")`}}/>
-                          <div className="text-center">
-                            <div className="w-8 h-8 rounded-full bg-[#0e7490] text-white grid place-items-center mx-auto"><MapPin className="w-4 h-4"/></div>
-                            <div className="text-[11px] mt-1 text-slate-600">{selectedProfile.address}</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+            {/* Hero Local */}
+            <div className="bg-gradient-to-br from-[#0e7490] to-cyan-600 rounded-[28px] p-6 md:p-8 text-white relative overflow-hidden">
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute w-[300px] h-[300px] rounded-full bg-white blur-3xl -top-20 -left-20"></div>
               </div>
-
-              {/* Booking Form */}
-              <div className="flex-1">
-                <div className="bg-white rounded-[24px] p-6 md:p-8 border border-slate-100 shadow-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h1 className="text-[24px] font-extrabold leading-tight">احجز موعدك الآن</h1>
-                      <p className="text-sm text-slate-500 mt-1">Prendre RDV en ligne • حجز سريع بدون تسجيل</p>
-                    </div>
-                    <div className="hidden md:flex items-center gap-2 text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full">
-                      <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
-                      {bookingsForSelected.filter(b=>b.status!=="cancelled").length} حجز هذا الأسبوع
-                    </div>
-                  </div>
-
-                  {bookingSuccess && (
-                    <div className="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex gap-3 items-start">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5"/>
-                      <div>
-                        <div className="text-sm font-bold text-emerald-800">تم الحجز بنجاح!</div>
-                        <div className="text-xs text-emerald-700 mt-1">سيتواصل معك الطبيب لتأكيد الموعد • Votre demande a été envoyée, le cabinet va vous confirmer sur WhatsApp.</div>
-                      </div>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleBookingSubmit} className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="md:col-span-2">
-                      <label className="text-xs font-medium">اسم المريض الكامل - Nom complet *</label>
-                      <input
-                        required
-                        value={patientForm.patientName}
-                        onChange={e=>setPatientForm({...patientForm, patientName:e.target.value})}
-                        placeholder="مثال: محمد لمين"
-                        className="mt-1.5 w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-[#0e7490] focus:outline-none text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium">رقم الهاتف - Téléphone *</label>
-                      <input
-                        required
-                        dir="ltr"
-                        value={patientForm.phone}
-                        onChange={e=>setPatientForm({...patientForm, phone:e.target.value})}
-                        placeholder="0550 00 00 00"
-                        className="mt-1.5 w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-[#0e7490] focus:outline-none text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium">نوع الخدمة - Service souhaité</label>
-                      <select
-                        value={patientForm.service}
-                        onChange={e=>setPatientForm({...patientForm, service:e.target.value})}
-                        className="mt-1.5 w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-[#0e7490] focus:outline-none text-sm"
-                      >
-                        {selectedProfile?.services.map(s=><option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium">التاريخ - Date *</label>
-                      <input
-                        required
-                        type="date"
-                        value={patientForm.date}
-                        onChange={e=>setPatientForm({...patientForm, date:e.target.value})}
-                        className="mt-1.5 w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-[#0e7490] focus:outline-none text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium">الوقت - Heure *</label>
-                      <input
-                        required
-                        type="time"
-                        value={patientForm.time}
-                        onChange={e=>setPatientForm({...patientForm, time:e.target.value})}
-                        className="mt-1.5 w-full h-12 px-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-[#0e7490] focus:outline-none text-sm"
-                      />
-                    </div>
-                    <div className="md:col-span-2 mt-2">
-                      <button type="submit" className="w-full h-[52px] rounded-xl bg-[#0e7490] text-white font-extrabold text-[15px] flex items-center justify-center gap-2 hover:bg-cyan-800 transition shadow-lg shadow-cyan-900/20">
-                        <Calendar className="w-5 h-5"/>
-                        تأكيد الحجز - Confirmer RDV
-                      </button>
-                      <p className="text-[11px] text-slate-400 text-center mt-3">بالضغط على تأكيد، سيتم إرسال طلبك مباشرة للطبيب • Sans paiement en ligne</p>
-                    </div>
-                  </form>
-
-                  <div className="mt-10 border-t pt-6">
-                    <h4 className="text-xs font-bold text-slate-700 mb-3">آخر الحجوزات في هذه العيادة • Derniers RDV</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {bookingsForSelected.slice(0,4).map(b=>(
-                        <div key={b.id} className="p-3 rounded-xl border bg-slate-50 flex items-center justify-between">
-                          <div>
-                            <div className="text-xs font-bold">{b.patientName} • {b.time}</div>
-                            <div className="text-[11px] text-slate-500">{b.date} • {b.service.split("-")[0]}</div>
-                          </div>
-                          <span className={`text-[10px] px-2 py-1 rounded-full border ${b.status==="confirmed"?"bg-emerald-50 text-emerald-700 border-emerald-200":"bg-amber-50 text-amber-700 border-amber-200"}`}>{b.status}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] bg-white/20 px-3 py-1 rounded-full border border-white/20">📍 برج بوعريريج فقط - Local</span>
+                  <span className="text-[11px] bg-emerald-400/20 px-3 py-1 rounded-full border border-emerald-300/30">● مفتوح الآن</span>
                 </div>
-
-                <div className="mt-4 bg-gradient-to-br from-slate-900 to-slate-800 rounded-[20px] p-5 text-white flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/10 grid place-items-center"><Shield className="w-5 h-5"/></div>
-                    <div>
-                      <div className="text-sm font-bold">DentiDz Pro • منصة موثوقة</div>
-                      <div className="text-[11px] text-slate-300">Plateforme 100% algérienne • حماية بيانات المرضى • Hébergement local</div>
-                    </div>
+                <h1 className="text-[26px] md:text-[34px] font-extrabold leading-tight">أطباء الأسنان في برج بوعريريج 🦷</h1>
+                <p className="text-cyan-100 text-sm mt-2 max-w-[600px]">حوس على طبيبك القريب ليك، وشوف خدماتو، واحجز موعدك في دقيقة بلا ما تتنقل</p>
+                
+                <div className="mt-6 bg-white rounded-[16px] p-3 flex flex-col md:flex-row gap-3 shadow-xl max-w-[700px]">
+                  <div className="flex-[1.5] flex items-center gap-2 bg-slate-50 rounded-xl px-3 h-12 border">
+                    <Search className="w-5 h-5 text-slate-400 shrink-0"/>
+                    <input value={patientSearch} onChange={(e)=>setPatientSearch(e.target.value)} placeholder="حوس على طبيب، خدمة، عنوان..." className="flex-1 bg-transparent outline-none text-sm text-slate-800"/>
                   </div>
-                  <div className="text-[10px] bg-white/10 px-3 py-1.5 rounded-full">© 2026 Rida</div>
+                  <div className="text-[11px] bg-slate-900 text-white px-5 h-12 rounded-xl grid place-items-center font-bold">
+                    {activeSubs.filter(sub=>{
+                      const p = profiles[sub.code];
+                      if(!p) return false;
+                      if(patientSearch){
+                        const q = patientSearch.toLowerCase();
+                        return p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q) || p.services.join(" ").toLowerCase().includes(q);
+                      }
+                      return true;
+                    }).length} طبيب في برج
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Doctors Grid - Bordj Only */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activeSubs.filter(sub=>{
+                const p = profiles[sub.code];
+                if(!p) return false;
+                if(patientSearch){
+                  const q = patientSearch.toLowerCase();
+                  return p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q) || p.services.join(" ").toLowerCase().includes(q);
+                }
+                return true;
+              }).map(sub=>{
+                const p = profiles[sub.code];
+                const isBookingOpen = showBookingFor===sub.code;
+                return (
+                  <div key={sub.code} className="bg-white rounded-[22px] border border-slate-100 shadow-sm overflow-hidden hover:shadow-lg transition group">
+                    <div className="p-5">
+                      <div className="flex gap-3">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#0e7490] to-cyan-500 grid place-items-center text-white font-extrabold text-lg shrink-0">{p.name.charAt(0)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-extrabold text-[15px] leading-tight truncate">{p.name}</div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center gap-1">● متوفر</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-50 border text-slate-600 flex items-center gap-1"><MapPin className="w-3 h-3"/>برج بوعريريج</span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-1.5 line-clamp-2 flex gap-1"><MapPin className="w-3 h-3 mt-0.5 shrink-0"/>{p.address}</div>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-1">
+                        {p.services.slice(0,3).map(s=> <span key={s} className="text-[10px] px-2 py-1 rounded-full bg-slate-50 border text-slate-600">{s.split("-")[0].trim()}</span>)}
+                        {p.services.length>3 && <span className="text-[10px] px-2 py-1 rounded-full bg-slate-900 text-white">+{p.services.length-3}</span>}
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-2">
+                        <a href={`https://wa.me/${p.whatsapp}`} target="_blank" className="h-10 rounded-xl bg-[#25D366]/10 border border-[#25D366]/20 text-[#16a34a] text-xs font-bold flex items-center justify-center gap-1 hover:bg-[#25D366] hover:text-white transition"><MessageCircle className="w-4 h-4"/> واتساب</a>
+                        <button onClick={()=>{ setSelectedDentistCode(sub.code); setShowBookingFor(isBookingOpen ? null : sub.code); setPatientForm(f=>({...f, service: p.services[0]})); }} className={`h-10 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition ${isBookingOpen ? "bg-slate-900 text-white" : "bg-[#0e7490] text-white hover:bg-cyan-800"}`}><Calendar className="w-4 h-4"/>{isBookingOpen ? "إغلاق" : "احجز موعد"}</button>
+                      </div>
+                    </div>
+                    {isBookingOpen && (
+                      <div className="border-t bg-[#f8fdff] p-5 animate-in">
+                        {bookingSuccess && selectedDentistCode===sub.code && (
+                          <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex gap-2">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0"/><div><div className="text-xs font-bold text-emerald-800">تم الحجز!</div><div className="text-[11px] text-emerald-700">سيتواصل معك الطبيب</div></div>
+                          </div>
+                        )}
+                        <form onSubmit={(e)=>{ e.preventDefault(); handleBookingSubmit(e); }} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="md:col-span-2"><label className="text-[11px] font-bold">اسمك الكامل *</label><input required value={patientForm.patientName} onChange={e=>setPatientForm({...patientForm, patientName:e.target.value})} placeholder="محمد لمين" className="mt-1 w-full h-11 px-3 rounded-xl border bg-white text-sm outline-none focus:border-[#0e7490]"/></div>
+                          <div><label className="text-[11px] font-bold">الهاتف *</label><input required dir="ltr" value={patientForm.phone} onChange={e=>setPatientForm({...patientForm, phone:e.target.value})} placeholder="0550 00 00 00" className="mt-1 w-full h-11 px-3 rounded-xl border bg-white text-sm outline-none focus:border-[#0e7490]"/></div>
+                          <div><label className="text-[11px] font-bold">الخدمة</label><select value={patientForm.service} onChange={e=>setPatientForm({...patientForm, service:e.target.value})} className="mt-1 w-full h-11 px-3 rounded-xl border bg-white text-sm outline-none"><>{p.services.map(s=><option key={s} value={s}>{s}</option>)}</></select></div>
+                          <div><label className="text-[11px] font-bold">التاريخ *</label><input required type="date" value={patientForm.date} onChange={e=>setPatientForm({...patientForm, date:e.target.value})} className="mt-1 w-full h-11 px-3 rounded-xl border bg-white text-sm outline-none"/></div>
+                          <div><label className="text-[11px] font-bold">الوقت *</label><input required type="time" value={patientForm.time} onChange={e=>setPatientForm({...patientForm, time:e.target.value})} className="mt-1 w-full h-11 px-3 rounded-xl border bg-white text-sm outline-none"/></div>
+                          <div className="md:col-span-2 mt-1"><button type="submit" className="w-full h-12 rounded-xl bg-[#0e7490] text-white font-bold text-sm flex items-center justify-center gap-2"><Calendar className="w-4 h-4"/>تأكيد الحجز</button></div>
+                        </form>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {activeSubs.filter(sub=>{ const p=profiles[sub.code]; if(!p) return false; if(patientSearch){ const q=patientSearch.toLowerCase(); return p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q); } return true; }).length===0 && (
+              <div className="bg-white rounded-[20px] border border-dashed p-10 text-center">
+                <Search className="w-10 h-10 mx-auto text-slate-300 mb-3"/>
+                <div className="font-bold">ما لقيناش طبيب بهاد الاسم</div>
+                <div className="text-xs text-slate-500 mt-1">جرب تكتب حاجة أخرى - كل الأطباء من برج بوعريريج برك</div>
+                <button onClick={()=>{setPatientSearch("");}} className="mt-4 px-4 py-2 rounded-full bg-slate-900 text-white text-xs">مسح البحث</button>
+              </div>
+            )}
+
+            <div className="bg-slate-900 rounded-[20px] p-5 text-white flex flex-col md:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 grid place-items-center"><MapPin className="w-5 h-5"/></div>
+                <div>
+                  <div className="text-sm font-bold">DentiDz • برج بوعريريج فقط</div>
+                  <div className="text-[11px] text-slate-300">منصة محلية 100% • كل الأطباء من برج بوعريريج</div>
+                </div>
+              </div>
+              <div className="text-[10px] bg-white/10 px-3 py-1.5 rounded-full">© 2026 Rida - Bordj Bou Arreridj</div>
+            </div>
           </div>
         )}
-      </main>
+
+            </main>
 
       <footer className="mt-10 border-t border-slate-200 bg-white/60">
         <div className="max-w-[1280px] mx-auto px-4 md:px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-2 text-[11px] text-slate-500">
